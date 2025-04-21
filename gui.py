@@ -473,11 +473,6 @@ def manage_courses():
     courses_text = scrolledtext.ScrolledText(manage_window, width=50, height=10)
     courses_text.pack(pady=10, padx=10)
     
-    # No direct way to get instructor's courses, but we can simulate
-    courses_text.insert(tk.END, "Note: This would require additional server-side functionality\n")
-    courses_text.insert(tk.END, "to track and retrieve instructor's courses.\n\n")
-    courses_text.insert(tk.END, "For now, you can view all courses and identify yours.\n")
-    
     def load_all_courses():
         response = client.send_request("GET_COURSES")
         courses_text.delete(1.0, tk.END)
