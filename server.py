@@ -4,7 +4,6 @@ import threading
 import json
 import redis
 
-# Database connection
 conn = sqlite3.connect("lms.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -42,17 +41,16 @@ CREATE TABLE IF NOT EXISTS announcements (
 """)
 conn.commit()
 
-# Redis connection for pub/sub
+
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
-# Function to Register Users
+# Register Users
 def register_user(role, username, password):
     try:
         cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", 
                       (username, password, role))
         conn.commit()
         
-        # Publish event for new user registration
         event_data = {
             "event_type": "new_user",
             "username": username,
@@ -64,13 +62,12 @@ def register_user(role, username, password):
     except sqlite3.IntegrityError:
         return "Error: Username already exists!"
 
-# Function to Login Users
+# Login Users
 def login_user(username, password):
     cursor.execute("SELECT role FROM users WHERE username=? AND password=?", 
                   (username, password))
     result = cursor.fetchone()
     if result:
-        # Publish login event
         event_data = {
             "event_type": "user_login",
             "username": username,
@@ -80,7 +77,7 @@ def login_user(username, password):
         return f"Login successful {result[0]}"
     return "Error: Invalid credentials"
 
-# Function to upload course resources
+# upload course resources
 def upload_course_resources(course_id, resource_url, poster_username):
     try:
         cursor.execute("INSERT INTO courses (course_id, resource_url, poster_username) VALUES (?, ?, ?)", 
@@ -101,7 +98,7 @@ def upload_course_resources(course_id, resource_url, poster_username):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to get course resources
+# fget course resources
 def get_course_resource(course_id):
     try:
         cursor.execute("SELECT resource_url FROM courses WHERE course_id=?", (course_id,))
@@ -113,7 +110,7 @@ def get_course_resource(course_id):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to get all courses
+# get all courses
 def get_all_courses():
     try:
         cursor.execute("SELECT DISTINCT course_id FROM courses")
@@ -124,7 +121,7 @@ def get_all_courses():
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to subscribe to a course
+#subscribe to a course
 def subscribe_to_course(username, course_id):
     try:
         cursor.execute("INSERT INTO subscriptions (username, course_id) VALUES (?, ?)", 
@@ -145,7 +142,7 @@ def subscribe_to_course(username, course_id):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to unsubscribe from a course
+# unsubscribe from a course
 def unsubscribe_from_course(username, course_id):
     try:
         cursor.execute("DELETE FROM subscriptions WHERE username=? AND course_id=?", 
@@ -164,7 +161,7 @@ def unsubscribe_from_course(username, course_id):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to get subscribed courses
+
 def get_subscribed_courses(username):
     try:
         cursor.execute("SELECT course_id FROM subscriptions WHERE username=?", (username,))
@@ -183,8 +180,6 @@ def post_announcement(course_id, message, instructor):
         cursor.execute("INSERT INTO announcements (course_id, message, instructor, timestamp) VALUES (?, ?, ?, ?)", 
                       (course_id, message, instructor, timestamp))
         conn.commit()
-        
-        # Publish announcement event
         event_data = {
             "event_type": "announcement",
             "course_id": course_id,
@@ -199,7 +194,6 @@ def post_announcement(course_id, message, instructor):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to get course announcements
 def get_course_announcements(course_id):
     try:
         cursor.execute("SELECT message, instructor, timestamp FROM announcements WHERE course_id=? ORDER BY timestamp DESC", 
@@ -216,7 +210,6 @@ def get_course_announcements(course_id):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Function to Handle Client Requests
 def handle_client(client_socket):
     request = client_socket.recv(1024).decode()
     parts = request.split()

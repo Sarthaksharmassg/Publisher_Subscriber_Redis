@@ -10,7 +10,6 @@ message_queue = Queue()
 # Dictionary to store callback functions for different channels
 callbacks = {}
 
-# Redis client for pub/sub
 redis_client = None
 pubsub = None
 subscriber_thread = None
@@ -18,12 +17,10 @@ subscriber_thread = None
 def initialize_redis():
     """Initialize the Redis connection and subscriber thread"""
     global redis_client, pubsub, subscriber_thread
-    
-    # Connect to Redis
+ 
     redis_client = redis.Redis(host='localhost', port=6379, db=0)
     pubsub = redis_client.pubsub()
-    
-    # Start subscriber thread
+  
     subscriber_thread = threading.Thread(target=subscriber_loop)
     subscriber_thread.daemon = True
     subscriber_thread.start()
@@ -37,8 +34,7 @@ def subscribe_to_channel(channel, callback):
     
     # Register callback
     callbacks[channel] = callback
-    
-    # Subscribe to channel
+
     pubsub.subscribe(channel)
 
 def subscriber_loop():
@@ -53,14 +49,13 @@ def subscriber_loop():
             try:
                 message_data = json.loads(data)
                 
-                # Add to queue for processing
                 message_queue.put((channel, message_data))
                 
-                # Call appropriate callback if registered
+                # Call callback if registered
                 if channel in callbacks and callbacks[channel]:
                     callbacks[channel](message_data)
             except json.JSONDecodeError:
-                pass  # Ignore non-JSON messages
+                pass 
 
 def process_messages():
     """Process any messages in the queue, return True if messages were processed"""

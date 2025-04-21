@@ -2,27 +2,25 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 import threading
 import time
-import client  # Import the Redis-aware client module
+import client
 
 # Global variable to store current user info
 current_user = {"username": "", "role": ""}
 
-# Main window
 root = tk.Tk()
 root.title("Learning Management System")
 root.geometry("600x450")
 
-# Create frames for different screens
+
 login_frame = tk.Frame(root)
 signup_frame = tk.Frame(root)
 student_frame = tk.Frame(root)
 instructor_frame = tk.Frame(root)
-activity_frame = tk.Frame(root)  # New frame for activity feed
+activity_frame = tk.Frame(root) 
 
 # Activity feed that can be accessed from both student and instructor views
 activity_feed = None
 
-# Function to show a frame and hide others
 def show_frame(frame):
     login_frame.pack_forget()
     signup_frame.pack_forget()
@@ -31,7 +29,7 @@ def show_frame(frame):
     activity_frame.pack_forget()
     frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-# Function to update activity feed
+
 def update_activity_feed(message_data):
     if activity_feed:
         event_type = message_data.get("event_type")
@@ -59,7 +57,7 @@ def update_activity_feed(message_data):
         
         activity_feed.see(tk.END)  # Auto-scroll to the bottom
 
-# Function to create the activity feed frame
+# activity feed frame
 def create_activity_feed():
     global activity_feed
     
@@ -107,7 +105,6 @@ def handle_login():
         current_user["username"] = username
         current_user["role"] = response.split()[-1]
         
-        # Initialize Redis client and create activity feed
         client.initialize_redis()
         create_activity_feed()
         
@@ -166,7 +163,6 @@ student_welcome_label.pack(pady=10)
 def refresh_student_dashboard():
     student_welcome_label.config(text=f"Welcome, Student {current_user['username']}!")
     
-    # Get list of subscribed courses and subscribe to their channels
     response = client.get_user_subscriptions(current_user["username"])
     if "not subscribed" not in response:
         courses = response.split("|")
@@ -192,7 +188,6 @@ def view_courses():
         for i, course in enumerate(courses, 1):
             text_area.insert(tk.END, f"{i}. {course}\n")
     
-    # Add subscription functionality
     tk.Label(courses_window, text="Subscribe to Course:").pack(pady=5)
     course_entry = tk.Entry(courses_window, width=20)
     course_entry.pack(pady=5)
@@ -213,7 +208,6 @@ def view_courses():
     tk.Button(courses_window, text="Close", command=courses_window.destroy).pack(pady=5)
 
 def view_my_subscriptions():
-    # Create a pop-up window to display subscribed courses
     subs_window = tk.Toplevel(root)
     subs_window.title("My Subscriptions")
     subs_window.geometry("400x350")
@@ -231,7 +225,6 @@ def view_my_subscriptions():
         for i, course in enumerate(courses, 1):
             text_area.insert(tk.END, f"{i}. {course}\n")
     
-    # Add unsubscribe functionality
     tk.Label(subs_window, text="Unsubscribe from Course:").pack(pady=5)
     course_entry = tk.Entry(subs_window, width=20)
     course_entry.pack(pady=5)
@@ -260,7 +253,6 @@ def view_my_subscriptions():
     tk.Button(subs_window, text="Close", command=subs_window.destroy).pack(pady=5)
 
 def view_resources():
-    # Create a pop-up window to get resources
     resources_window = tk.Toplevel(root)
     resources_window.title("Course Resources")
     resources_window.geometry("400x350")
@@ -293,7 +285,6 @@ def view_resources():
     tk.Button(resources_window, text="Close", command=resources_window.destroy).pack(pady=5)
 
 def view_announcements():
-    # Create a pop-up window to view announcements
     announcements_window = tk.Toplevel(root)
     announcements_window.title("Course Announcements")
     announcements_window.geometry("500x400")
@@ -325,7 +316,6 @@ def view_announcements():
     tk.Button(announcements_window, text="Search", command=search_announcements).pack(pady=5)
     tk.Button(announcements_window, text="Close", command=announcements_window.destroy).pack(pady=5)
 
-# Student dashboard buttons
 tk.Button(student_frame, text="View All Courses", command=view_courses).pack(pady=8)
 tk.Button(student_frame, text="My Subscriptions", command=view_my_subscriptions).pack(pady=8)
 tk.Button(student_frame, text="View Course Resources", command=view_resources).pack(pady=8)
@@ -341,7 +331,6 @@ def refresh_instructor_dashboard():
     instructor_welcome_label.config(text=f"Welcome, Instructor {current_user['username']}!")
 
 def upload_resource():
-    # Create a pop-up window to upload resource
     upload_window = tk.Toplevel(root)
     upload_window.title("Upload Course Resource")
     upload_window.geometry("400x250")
@@ -372,7 +361,6 @@ def upload_resource():
     tk.Button(upload_window, text="Close", command=upload_window.destroy).pack(pady=5)
 
 def make_announcement():
-    # Create a pop-up window to post announcement
     announcement_window = tk.Toplevel(root)
     announcement_window.title("Post Announcement")
     announcement_window.geometry("450x300")
@@ -435,7 +423,6 @@ def make_announcement():
 #     tk.Button(stats_window, text="Close", command=stats_window.destroy).pack(pady=5)
 
 def manage_courses():
-    # Create a pop-up window to manage instructor's courses
     manage_window = tk.Toplevel(root)
     manage_window.title("Manage My Courses")
     manage_window.geometry("500x400")
@@ -488,7 +475,6 @@ def manage_courses():
     tk.Button(manage_window, text="Load All Courses", command=load_all_courses).pack(pady=5)
     tk.Button(manage_window, text="Close", command=manage_window.destroy).pack(pady=5)
 
-# Add buttons to instructor dashboard
 tk.Button(instructor_frame, text="Upload Resource", command=upload_resource).pack(pady=8)
 tk.Button(instructor_frame, text="Post Announcement", command=make_announcement).pack(pady=8)
 tk.Button(instructor_frame, text="Manage Courses", command=manage_courses).pack(pady=8)
@@ -498,7 +484,6 @@ tk.Button(instructor_frame, text="View Announcements", command=view_announcement
 tk.Button(instructor_frame, text="Activity Feed", command=lambda: show_frame(activity_frame)).pack(pady=8)
 tk.Button(instructor_frame, text="Logout", command=lambda: show_frame(login_frame)).pack(pady=8)
 
-# Start the application with the login screen
 show_frame(login_frame)
 
 # Start message processing loop - check the queue every 100ms
