@@ -405,34 +405,34 @@ def make_announcement():
     tk.Button(announcement_window, text="Post Announcement", command=handle_post).pack(pady=10)
     tk.Button(announcement_window, text="Close", command=announcement_window.destroy).pack(pady=5)
 
-def check_student_subscriptions():
-    # Create a pop-up window to check course subscription statistics
-    stats_window = tk.Toplevel(root)
-    stats_window.title("Course Subscription Statistics")
-    stats_window.geometry("450x350")
+# def check_student_subscriptions():
+#     # Create a pop-up window to check course subscription statistics
+#     stats_window = tk.Toplevel(root)
+#     stats_window.title("Course Subscription Statistics")
+#     stats_window.geometry("450x350")
     
-    tk.Label(stats_window, text="Enter Course ID:").pack(pady=10)
-    course_id_entry = tk.Entry(stats_window, width=20)
-    course_id_entry.pack(pady=5)
+#     tk.Label(stats_window, text="Enter Course ID:").pack(pady=10)
+#     course_id_entry = tk.Entry(stats_window, width=20)
+#     course_id_entry.pack(pady=5)
     
-    result_text = scrolledtext.ScrolledText(stats_window, width=40, height=10)
-    result_text.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+#     result_text = scrolledtext.ScrolledText(stats_window, width=40, height=10)
+#     result_text.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
     
-    def search_subscriptions():
-        course_id = course_id_entry.get()
-        if not course_id:
-            messagebox.showerror("Error", "Please enter a Course ID!")
-            return
+#     def search_subscriptions():
+#         course_id = course_id_entry.get()
+#         if not course_id:
+#             messagebox.showerror("Error", "Please enter a Course ID!")
+#             return
             
-        # This would require a new server command to get subscription statistics
-        # For now, we'll just show a message
-        result_text.delete(1.0, tk.END)
-        result_text.insert(tk.END, f"Subscription statistics for course {course_id}:\n\n")
-        result_text.insert(tk.END, "This feature is not yet implemented on the server side.\n")
-        result_text.insert(tk.END, "It would require a new command to be added to the server.")
+#         # This would require a new server command to get subscription statistics
+#         # For now, we'll just show a message
+#         result_text.delete(1.0, tk.END)
+#         result_text.insert(tk.END, f"Subscription statistics for course {course_id}:\n\n")
+#         result_text.insert(tk.END, "This feature is not yet implemented on the server side.\n")
+#         result_text.insert(tk.END, "It would require a new command to be added to the server.")
     
-    tk.Button(stats_window, text="Search", command=search_subscriptions).pack(pady=5)
-    tk.Button(stats_window, text="Close", command=stats_window.destroy).pack(pady=5)
+#     tk.Button(stats_window, text="Search", command=search_subscriptions).pack(pady=5)
+#     tk.Button(stats_window, text="Close", command=stats_window.destroy).pack(pady=5)
 
 def manage_courses():
     # Create a pop-up window to manage instructor's courses
@@ -499,7 +499,7 @@ tk.Button(instructor_frame, text="Post Announcement", command=make_announcement)
 tk.Button(instructor_frame, text="Manage Courses", command=manage_courses).pack(pady=8)
 tk.Button(instructor_frame, text="View Course Resources", command=view_resources).pack(pady=8)
 tk.Button(instructor_frame, text="View Announcements", command=view_announcements).pack(pady=8)
-tk.Button(instructor_frame, text="Check Subscriptions", command=check_student_subscriptions).pack(pady=8)
+# tk.Button(instructor_frame, text="Check Subscriptions", command=check_student_subscriptions).pack(pady=8)
 tk.Button(instructor_frame, text="Activity Feed", command=lambda: show_frame(activity_frame)).pack(pady=8)
 tk.Button(instructor_frame, text="Logout", command=lambda: show_frame(login_frame)).pack(pady=8)
 
