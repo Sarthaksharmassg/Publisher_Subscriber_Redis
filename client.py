@@ -64,7 +64,7 @@ def process_messages():
     
     while not message_queue.empty():
         channel, data = message_queue.get()
-        # This is where you could handle messages globally
+        # could handle messages globally
     
     return True
 
@@ -86,7 +86,7 @@ def subscribe_user_to_course(username, course_id):
     response = send_request(f"SUBSCRIBE {username} {course_id}")
     
     # Also subscribe to the Redis channel for this course
-    subscribe_to_channel(f"course:{course_id}", None)  # You can add a callback later
+    subscribe_to_channel(f"course:{course_id}", None) 
     
     return response
 
