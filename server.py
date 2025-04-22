@@ -3,6 +3,7 @@ import socket
 import threading
 import json
 import redis
+import datetime
 
 conn = sqlite3.connect("lms.db", check_same_thread=False)
 cursor = conn.cursor()
@@ -41,8 +42,13 @@ CREATE TABLE IF NOT EXISTS announcements (
 """)
 conn.commit()
 
-
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+# Initialize Redis client
+try:
+    redis_client = redis.Redis(host='localhost', port=6379, db=0)
+    print("Connected to Redis successfully")
+except Exception as e:
+    print(f"Failed to connect to Redis: {e}")
+    redis_client = None
 
 # Register Users
 def register_user(role, username, password):
@@ -51,12 +57,14 @@ def register_user(role, username, password):
                       (username, password, role))
         conn.commit()
         
-        event_data = {
-            "event_type": "new_user",
-            "username": username,
-            "role": role
-        }
-        redis_client.publish('system_events', json.dumps(event_data))
+        if redis_client:
+            event_data = {
+                "event_type": "new_user",
+                "username": username,
+                "role": role
+            }
+            redis_client.publish('system_events', json.dumps(event_data))
+            print(f"Published new_user event for {username}")
         
         return "Registration successful!"
     except sqlite3.IntegrityError:
@@ -68,12 +76,14 @@ def login_user(username, password):
                   (username, password))
     result = cursor.fetchone()
     if result:
-        event_data = {
-            "event_type": "user_login",
-            "username": username,
-            "role": result[0]
-        }
-        redis_client.publish('system_events', json.dumps(event_data))
+        if redis_client:
+            event_data = {
+                "event_type": "user_login",
+                "username": username,
+                "role": result[0]
+            }
+            redis_client.publish('system_events', json.dumps(event_data))
+            print(f"Published user_login event for {username}")
         return f"Login successful {result[0]}"
     return "Error: Invalid credentials"
 
@@ -85,20 +95,22 @@ def upload_course_resources(course_id, resource_url, poster_username):
         conn.commit()
         
         # Publish event for new resource
-        event_data = {
-            "event_type": "new_resource",
-            "course_id": course_id,
-            "resource_url": resource_url,
-            "poster": poster_username
-        }
-        redis_client.publish(f'course:{course_id}', json.dumps(event_data))
-        redis_client.publish('all_courses', json.dumps(event_data))
+        if redis_client:
+            event_data = {
+                "event_type": "new_resource",
+                "course_id": course_id,
+                "resource_url": resource_url,
+                "poster": poster_username
+            }
+            redis_client.publish(f'course:{course_id}', json.dumps(event_data))
+            redis_client.publish('all_courses', json.dumps(event_data))
+            print(f"Published new_resource event for course {course_id}")
         
         return "Resource Added Successfully"
     except Exception as e:
         return f"Error: {str(e)}"
 
-# fget course resources
+# get course resources
 def get_course_resource(course_id):
     try:
         cursor.execute("SELECT resource_url FROM courses WHERE course_id=?", (course_id,))
@@ -129,12 +141,15 @@ def subscribe_to_course(username, course_id):
         conn.commit()
         
         # Publish subscription event
-        event_data = {
-            "event_type": "new_subscription",
-            "username": username,
-            "course_id": course_id
-        }
-        redis_client.publish(f'course:{course_id}', json.dumps(event_data))
+        if redis_client:
+            event_data = {
+                "event_type": "new_subscription",
+                "username": username,
+                "course_id": course_id
+            }
+            redis_client.publish(f'course:{course_id}', json.dumps(event_data))
+            redis_client.publish('system_events', json.dumps(event_data))
+            print(f"Published new_subscription event for {username} to course {course_id}")
         
         return f"Successfully subscribed to course {course_id}"
     except sqlite3.IntegrityError:
@@ -150,12 +165,15 @@ def unsubscribe_from_course(username, course_id):
         conn.commit()
         
         # Publish unsubscription event
-        event_data = {
-            "event_type": "unsubscription",
-            "username": username,
-            "course_id": course_id
-        }
-        redis_client.publish(f'course:{course_id}', json.dumps(event_data))
+        if redis_client:
+            event_data = {
+                "event_type": "unsubscription",
+                "username": username,
+                "course_id": course_id
+            }
+            redis_client.publish(f'course:{course_id}', json.dumps(event_data))
+            redis_client.publish('system_events', json.dumps(event_data))
+            print(f"Published unsubscription event for {username} from course {course_id}")
         
         return f"Successfully unsubscribed from course {course_id}"
     except Exception as e:
@@ -175,20 +193,22 @@ def get_subscribed_courses(username):
 # Function to post an announcement
 def post_announcement(course_id, message, instructor):
     try:
-        import datetime
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("INSERT INTO announcements (course_id, message, instructor, timestamp) VALUES (?, ?, ?, ?)", 
                       (course_id, message, instructor, timestamp))
         conn.commit()
-        event_data = {
-            "event_type": "announcement",
-            "course_id": course_id,
-            "message": message,
-            "instructor": instructor,
-            "timestamp": timestamp
-        }
-        redis_client.publish(f'course:{course_id}', json.dumps(event_data))
-        redis_client.publish('announcements', json.dumps(event_data))
+        
+        if redis_client:
+            event_data = {
+                "event_type": "announcement",
+                "course_id": course_id,
+                "message": message,
+                "instructor": instructor,
+                "timestamp": timestamp
+            }
+            redis_client.publish(f'course:{course_id}', json.dumps(event_data))
+            redis_client.publish('announcements', json.dumps(event_data))
+            print(f"Published announcement event for course {course_id}")
         
         return "Announcement posted successfully"
     except Exception as e:
@@ -211,45 +231,55 @@ def get_course_announcements(course_id):
         return f"Error: {str(e)}"
 
 def handle_client(client_socket):
-    request = client_socket.recv(1024).decode()
-    parts = request.split()
-    command = parts[0]
-    
-    if command == "REGISTER":
-        role, username, password = parts[1], parts[2], parts[3]
-        response = register_user(role, username, password)
-    elif command == "LOGIN":
-        username, password = parts[1], parts[2]
-        response = login_user(username, password)
-    elif command == "GET_COURSES":
-        response = get_all_courses()
-    elif command == "GET_RESOURCES":
-        course_id = parts[1]
-        response = get_course_resource(course_id)
-    elif command == "UPLOAD_RESOURCE":
-        course_id, resource_url, poster_username = parts[1], parts[2], parts[3]
-        response = upload_course_resources(course_id, resource_url, poster_username)
-    elif command == "SUBSCRIBE":
-        username, course_id = parts[1], parts[2]
-        response = subscribe_to_course(username, course_id)
-    elif command == "UNSUBSCRIBE":
-        username, course_id = parts[1], parts[2]
-        response = unsubscribe_from_course(username, course_id)
-    elif command == "MY_SUBSCRIPTIONS":
-        username = parts[1]
-        response = get_subscribed_courses(username)
-    elif command == "POST_ANNOUNCEMENT":
-        course_id, instructor = parts[1], parts[2]
-        message = " ".join(parts[3:])
-        response = post_announcement(course_id, message, instructor)
-    elif command == "GET_ANNOUNCEMENTS":
-        course_id = parts[1]
-        response = get_course_announcements(course_id)
-    else:
-        response = "Invalid request!"
-    
-    client_socket.send(response.encode())
-    client_socket.close()
+    try:
+        request = client_socket.recv(1024).decode()
+        print(f"Received request: {request}")
+        parts = request.split()
+        command = parts[0]
+        
+        if command == "REGISTER":
+            role, username, password = parts[1], parts[2], parts[3]
+            response = register_user(role, username, password)
+        elif command == "LOGIN":
+            username, password = parts[1], parts[2]
+            response = login_user(username, password)
+        elif command == "GET_COURSES":
+            response = get_all_courses()
+        elif command == "GET_RESOURCES":
+            course_id = parts[1]
+            response = get_course_resource(course_id)
+        elif command == "UPLOAD_RESOURCE":
+            course_id, resource_url, poster_username = parts[1], parts[2], parts[3]
+            response = upload_course_resources(course_id, resource_url, poster_username)
+        elif command == "SUBSCRIBE":
+            username, course_id = parts[1], parts[2]
+            response = subscribe_to_course(username, course_id)
+        elif command == "UNSUBSCRIBE":
+            username, course_id = parts[1], parts[2]
+            response = unsubscribe_from_course(username, course_id)
+        elif command == "MY_SUBSCRIPTIONS":
+            username = parts[1]
+            response = get_subscribed_courses(username)
+        elif command == "POST_ANNOUNCEMENT":
+            course_id, instructor = parts[1], parts[2]
+            message = " ".join(parts[3:])
+            response = post_announcement(course_id, message, instructor)
+        elif command == "GET_ANNOUNCEMENTS":
+            course_id = parts[1]
+            response = get_course_announcements(course_id)
+        else:
+            response = "Invalid request!"
+        
+        print(f"Sending response: {response}")
+        client_socket.send(response.encode())
+    except Exception as e:
+        print(f"Error handling client request: {e}")
+        try:
+            client_socket.send(f"Server error: {str(e)}".encode())
+        except:
+            pass
+    finally:
+        client_socket.close()
 
 # Start Server
 def start_server():
@@ -261,6 +291,7 @@ def start_server():
     try:
         while True:
             client_sock, addr = server_socket.accept()
+            print(f"New connection from {addr}")
             threading.Thread(target=handle_client, args=(client_sock,)).start()
     except KeyboardInterrupt:
         print("Shutting down server...")

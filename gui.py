@@ -31,6 +31,7 @@ def show_frame(frame):
 
 
 def update_activity_feed(message_data):
+    print(f"UPDATE ACTIVITY FEED CALLED: {message_data}")
     if activity_feed:
         event_type = message_data.get("event_type")
         
@@ -55,6 +56,23 @@ def update_activity_feed(message_data):
             role = message_data.get("role")
             activity_feed.insert(tk.END, f"[NEW USER] {username} joined as {role}\n")
         
+        elif event_type == "user_login":
+            username = message_data.get("username")
+            role = message_data.get("role")
+            activity_feed.insert(tk.END, f"[LOGIN] {username} logged in as {role}\n")
+            
+        elif event_type == "unsubscription":
+            username = message_data.get("username")
+            course_id = message_data.get("course_id")
+            activity_feed.insert(tk.END, f"[UNSUBSCRIBE] {username} unsubscribed from {course_id}\n")
+            
+        elif event_type == "test_message":
+            activity_feed.insert(tk.END, f"[TEST] {message_data.get('message')}\n")
+        
+        else:
+            print(f"Unhandled event type: {event_type}")
+            activity_feed.insert(tk.END, f"[EVENT] Unknown event type: {event_type}\n")
+        
         activity_feed.see(tk.END)  # Auto-scroll to the bottom
 
 # activity feed frame
@@ -72,11 +90,15 @@ def create_activity_feed():
     activity_feed.insert(tk.END, "Welcome to the Activity Feed!\n")
     activity_feed.insert(tk.END, "Real-time updates will appear here.\n\n")
     
+    # Test button to verify Redis connectivity
+    test_button = tk.Button(activity_frame, text="Test Redis", command=client.test_publish)
+    test_button.pack(pady=5)
+    
     back_button = tk.Button(activity_frame, text="Back", command=lambda: show_frame(
         student_frame if current_user["role"] == "student" else instructor_frame))
     back_button.pack(pady=10)
     
-    # Subscribe to relevant channels
+    # Subscribe to relevant channels with the update_activity_feed callback
     client.subscribe_to_channel("all_courses", update_activity_feed)
     client.subscribe_to_channel("announcements", update_activity_feed)
     client.subscribe_to_channel("system_events", update_activity_feed)
@@ -201,8 +223,9 @@ def view_courses():
         response = client.subscribe_user_to_course(current_user["username"], course_id)
         messagebox.showinfo("Subscription", response)
         
-        # Subscribe to course channel for real-time updates
-        client.subscribe_to_channel(f"course:{course_id}", update_activity_feed)
+        # Refresh the list after subscription
+        if "Successfully" in response:
+            client.subscribe_to_channel(f"course:{course_id}", update_activity_feed)
     
     tk.Button(courses_window, text="Subscribe", command=handle_subscribe).pack(pady=5)
     tk.Button(courses_window, text="Close", command=courses_window.destroy).pack(pady=5)
@@ -310,18 +333,30 @@ def view_announcements():
         else:
             announcements = response.split("|")
             result_text.insert(tk.END, f"Announcements for Course {course_id}:\n\n")
-            for i, announcement in enumerate(announcements, 1):
-                result_text.insert(tk.END, f"{i}. {announcement}\n\n")
+            for announcement in announcements:
+                result_text.insert(tk.END, f"{announcement}\n\n")
     
     tk.Button(announcements_window, text="Search", command=search_announcements).pack(pady=5)
     tk.Button(announcements_window, text="Close", command=announcements_window.destroy).pack(pady=5)
 
-tk.Button(student_frame, text="View All Courses", command=view_courses).pack(pady=8)
-tk.Button(student_frame, text="My Subscriptions", command=view_my_subscriptions).pack(pady=8)
-tk.Button(student_frame, text="View Course Resources", command=view_resources).pack(pady=8)
-tk.Button(student_frame, text="View Announcements", command=view_announcements).pack(pady=8)
-tk.Button(student_frame, text="Activity Feed", command=lambda: show_frame(activity_frame)).pack(pady=8)
-tk.Button(student_frame, text="Logout", command=lambda: show_frame(login_frame)).pack(pady=8)
+# Add student dashboard buttons
+view_courses_button = tk.Button(student_frame, text="View Available Courses", command=view_courses)
+view_courses_button.pack(pady=5)
+
+view_subscriptions_button = tk.Button(student_frame, text="My Subscriptions", command=view_my_subscriptions)
+view_subscriptions_button.pack(pady=5)
+
+view_resources_button = tk.Button(student_frame, text="View Course Resources", command=view_resources)
+view_resources_button.pack(pady=5)
+
+view_announcements_button = tk.Button(student_frame, text="View Announcements", command=view_announcements)
+view_announcements_button.pack(pady=5)
+
+view_activity_button = tk.Button(student_frame, text="Activity Feed", command=lambda: show_frame(activity_frame))
+view_activity_button.pack(pady=5)
+
+logout_button = tk.Button(student_frame, text="Logout", command=lambda: show_frame(login_frame))
+logout_button.pack(pady=10)
 
 # INSTRUCTOR DASHBOARD
 instructor_welcome_label = tk.Label(instructor_frame, text="", font=("Arial", 14, "bold"))
@@ -329,21 +364,37 @@ instructor_welcome_label.pack(pady=10)
 
 def refresh_instructor_dashboard():
     instructor_welcome_label.config(text=f"Welcome, Instructor {current_user['username']}!")
-
-def upload_resource():
-    upload_window = tk.Toplevel(root)
-    upload_window.title("Upload Course Resource")
-    upload_window.geometry("400x250")
     
-    tk.Label(upload_window, text="Course ID:").pack(pady=5)
-    course_id_entry = tk.Entry(upload_window, width=30)
+    # Subscribe to all course channels the instructor has created resources for
+    try:
+        import sqlite3
+        conn = sqlite3.connect("lms.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT course_id FROM courses WHERE poster_username=?", (current_user["username"],))
+        courses = cursor.fetchall()
+        
+        for course in courses:
+            client.subscribe_to_channel(f"course:{course[0]}", update_activity_feed)
+        
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error refreshing instructor dashboard: {e}")
+
+def create_course():
+    course_window = tk.Toplevel(root)
+    course_window.title("Add Course Resource")
+    course_window.geometry("400x300")
+    
+    tk.Label(course_window, text="Course ID:").pack(pady=5)
+    course_id_entry = tk.Entry(course_window, width=30)
     course_id_entry.pack(pady=5)
     
-    tk.Label(upload_window, text="Resource URL:").pack(pady=5)
-    resource_url_entry = tk.Entry(upload_window, width=30)
+    tk.Label(course_window, text="Resource URL/Path:").pack(pady=5)
+    resource_url_entry = tk.Entry(course_window, width=30)
     resource_url_entry.pack(pady=5)
     
-    def handle_upload():
+    def handle_add_resource():
         course_id = course_id_entry.get()
         resource_url = resource_url_entry.get()
         
@@ -352,146 +403,110 @@ def upload_resource():
             return
             
         response = client.send_request(f"UPLOAD_RESOURCE {course_id} {resource_url} {current_user['username']}")
-        messagebox.showinfo("Upload Result", response)
+        messagebox.showinfo("Add Resource", response)
+        
         if "Successfully" in response:
+            client.subscribe_to_channel(f"course:{course_id}", update_activity_feed)
             course_id_entry.delete(0, tk.END)
             resource_url_entry.delete(0, tk.END)
     
-    tk.Button(upload_window, text="Upload", command=handle_upload).pack(pady=10)
-    tk.Button(upload_window, text="Close", command=upload_window.destroy).pack(pady=5)
+    tk.Button(course_window, text="Add Resource", command=handle_add_resource).pack(pady=10)
+    tk.Button(course_window, text="Close", command=course_window.destroy).pack(pady=5)
 
-def make_announcement():
+def post_announcement_gui():
     announcement_window = tk.Toplevel(root)
     announcement_window.title("Post Announcement")
-    announcement_window.geometry("450x300")
+    announcement_window.geometry("400x350")
     
     tk.Label(announcement_window, text="Course ID:").pack(pady=5)
     course_id_entry = tk.Entry(announcement_window, width=30)
     course_id_entry.pack(pady=5)
     
-    tk.Label(announcement_window, text="Announcement Message:").pack(pady=5)
-    message_text = scrolledtext.ScrolledText(announcement_window, width=40, height=8)
-    message_text.pack(pady=5, padx=10)
+    tk.Label(announcement_window, text="Announcement:").pack(pady=5)
+    announcement_text = scrolledtext.ScrolledText(announcement_window, width=40, height=10)
+    announcement_text.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
     
     def handle_post():
         course_id = course_id_entry.get()
-        message = message_text.get(1.0, tk.END).strip()
+        message = announcement_text.get("1.0", tk.END).strip()
         
         if not course_id or not message:
             messagebox.showerror("Error", "Please fill all fields!")
             return
             
-        # Replace newlines with spaces to avoid command parsing issues
-        message = message.replace("\n", " ")
+        response = client.post_announcement(course_id, current_user["username"], message)
+        messagebox.showinfo("Post Announcement", response)
         
-        response = client.post_announcement(course_id, current_user['username'], message)
-        messagebox.showinfo("Post Result", response)
         if "successfully" in response:
             course_id_entry.delete(0, tk.END)
-            message_text.delete(1.0, tk.END)
+            announcement_text.delete("1.0", tk.END)
     
-    tk.Button(announcement_window, text="Post Announcement", command=handle_post).pack(pady=10)
+    tk.Button(announcement_window, text="Post", command=handle_post).pack(pady=10)
     tk.Button(announcement_window, text="Close", command=announcement_window.destroy).pack(pady=5)
 
-# def check_student_subscriptions():
-#     # Create a pop-up window to check course subscription statistics
-#     stats_window = tk.Toplevel(root)
-#     stats_window.title("Course Subscription Statistics")
-#     stats_window.geometry("450x350")
+def view_my_courses():
+    courses_window = tk.Toplevel(root)
+    courses_window.title("My Courses")
+    courses_window.geometry("400x350")
     
-#     tk.Label(stats_window, text="Enter Course ID:").pack(pady=10)
-#     course_id_entry = tk.Entry(stats_window, width=20)
-#     course_id_entry.pack(pady=5)
-    
-#     result_text = scrolledtext.ScrolledText(stats_window, width=40, height=10)
-#     result_text.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
-    
-#     def search_subscriptions():
-#         course_id = course_id_entry.get()
-#         if not course_id:
-#             messagebox.showerror("Error", "Please enter a Course ID!")
-#             return
-            
-#         # This would require a new server command to get subscription statistics
-#         # For now, we'll just show a message
-#         result_text.delete(1.0, tk.END)
-#         result_text.insert(tk.END, f"Subscription statistics for course {course_id}:\n\n")
-#         result_text.insert(tk.END, "This feature is not yet implemented on the server side.\n")
-#         result_text.insert(tk.END, "It would require a new command to be added to the server.")
-    
-#     tk.Button(stats_window, text="Search", command=search_subscriptions).pack(pady=5)
-#     tk.Button(stats_window, text="Close", command=stats_window.destroy).pack(pady=5)
-
-def manage_courses():
-    manage_window = tk.Toplevel(root)
-    manage_window.title("Manage My Courses")
-    manage_window.geometry("500x400")
-    
-    tk.Label(manage_window, text="Create New Course").pack(pady=10)
-    
-    tk.Label(manage_window, text="Course ID:").pack(pady=5)
-    course_id_entry = tk.Entry(manage_window, width=30)
-    course_id_entry.pack(pady=5)
-    
-    tk.Label(manage_window, text="Initial Resource URL:").pack(pady=5)
-    resource_url_entry = tk.Entry(manage_window, width=30)
-    resource_url_entry.pack(pady=5)
-    
-    def handle_create():
-        course_id = course_id_entry.get()
-        resource_url = resource_url_entry.get()
+    try:
+        import sqlite3
+        conn = sqlite3.connect("lms.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT course_id FROM courses WHERE poster_username=?", (current_user["username"],))
+        courses = cursor.fetchall()
         
-        if not course_id or not resource_url:
-            messagebox.showerror("Error", "Please fill all fields!")
-            return
-            
-        response = client.send_request(f"UPLOAD_RESOURCE {course_id} {resource_url} {current_user['username']}")
-        messagebox.showinfo("Course Creation", response)
-        if "Successfully" in response:
-            course_id_entry.delete(0, tk.END)
-            resource_url_entry.delete(0, tk.END)
-    
-    tk.Button(manage_window, text="Create Course", command=handle_create).pack(pady=10)
-    
-    # View existing courses section
-    tk.Label(manage_window, text="-" * 50).pack(pady=10)
-    tk.Label(manage_window, text="My Created Courses:").pack(pady=5)
-    
-    courses_text = scrolledtext.ScrolledText(manage_window, width=50, height=10)
-    courses_text.pack(pady=10, padx=10)
-    
-    def load_all_courses():
-        response = client.send_request("GET_COURSES")
-        courses_text.delete(1.0, tk.END)
+        text_area = scrolledtext.ScrolledText(courses_window, width=40, height=15)
+        text_area.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
         
-        if "No courses" in response or "Error" in response:
-            courses_text.insert(tk.END, response)
+        if not courses:
+            text_area.insert(tk.END, "You haven't created any courses yet.")
         else:
-            courses = response.split("|")
-            courses_text.insert(tk.END, "All Available Courses:\n\n")
+            text_area.insert(tk.END, "Your Courses:\n\n")
             for i, course in enumerate(courses, 1):
-                courses_text.insert(tk.END, f"{i}. {course}\n")
+                text_area.insert(tk.END, f"{i}. {course[0]}\n")
+                
+                # Get subscriber count
+                cursor.execute("SELECT COUNT(*) FROM subscriptions WHERE course_id=?", (course[0],))
+                sub_count = cursor.fetchone()[0]
+                text_area.insert(tk.END, f"   Subscribers: {sub_count}\n\n")
+        
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to fetch courses: {str(e)}")
     
-    tk.Button(manage_window, text="Load All Courses", command=load_all_courses).pack(pady=5)
-    tk.Button(manage_window, text="Close", command=manage_window.destroy).pack(pady=5)
+    tk.Button(courses_window, text="Close", command=courses_window.destroy).pack(pady=10)
 
-tk.Button(instructor_frame, text="Upload Resource", command=upload_resource).pack(pady=8)
-tk.Button(instructor_frame, text="Post Announcement", command=make_announcement).pack(pady=8)
-tk.Button(instructor_frame, text="Manage Courses", command=manage_courses).pack(pady=8)
-tk.Button(instructor_frame, text="View Course Resources", command=view_resources).pack(pady=8)
-tk.Button(instructor_frame, text="View Announcements", command=view_announcements).pack(pady=8)
-# tk.Button(instructor_frame, text="Check Subscriptions", command=check_student_subscriptions).pack(pady=8)
-tk.Button(instructor_frame, text="Activity Feed", command=lambda: show_frame(activity_frame)).pack(pady=8)
-tk.Button(instructor_frame, text="Logout", command=lambda: show_frame(login_frame)).pack(pady=8)
+# Add instructor dashboard buttons
+create_course_button = tk.Button(instructor_frame, text="Add Course Resource", command=create_course)
+create_course_button.pack(pady=5)
 
+post_announcement_button = tk.Button(instructor_frame, text="Post Announcement", command=post_announcement_gui)
+post_announcement_button.pack(pady=5)
+
+view_my_courses_button = tk.Button(instructor_frame, text="View My Courses", command=view_my_courses)
+view_my_courses_button.pack(pady=5)
+
+view_activity_button_instructor = tk.Button(instructor_frame, text="Activity Feed", command=lambda: show_frame(activity_frame))
+view_activity_button_instructor.pack(pady=5)
+
+logout_button_instructor = tk.Button(instructor_frame, text="Logout", command=lambda: show_frame(login_frame))
+logout_button_instructor.pack(pady=10)
+
+# Start with login frame
 show_frame(login_frame)
 
-# Start message processing loop - check the queue every 100ms
+# Setup timer to check Redis messages queue periodically
 def check_messages():
-    client.process_messages()
-    root.after(100, check_messages)
+    try:
+        client.process_messages()
+    except Exception as e:
+        print(f"Error in check_messages: {e}")
+    finally:
+        root.after(100, check_messages)  # Check every 100ms
 
 root.after(100, check_messages)
 
-# Main loop
+# Start the application
 root.mainloop()
